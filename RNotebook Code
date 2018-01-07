@@ -1,0 +1,161 @@
+---
+title: "Levent Kayın -- Empirical Excercise 1"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+#### Preperation
+
+Note: Some of the data manipulation (sorting and column deletion) has been done in Microsoft Excel.
+
+```{r}
+library(igraph)
+library(data.table)
+
+# Column-wise replacement function --------------
+
+column_wise_replace = function(DT, x, y) {
+  for(i in seq_along(x)){
+    for (j in seq_len(ncol(DT))){
+      set(DT,which(DT[[j]] == x[i]),j,y[i])
+    }
+  }
+}
+
+# Read, clean the data and seperate Trutst/Distrust and Advice --------
+
+mydata = fread(file="sample_generated_network.csv", header = TRUE)
+
+advice_edge1 = cbind(mydata[,1], mydata$V38)
+advice_edge2 = cbind(mydata[,1], mydata$V39)
+advice_edge3 = cbind(mydata[,1], mydata$V40)
+advice_edge4 = cbind(mydata[,1], mydata$V41)
+advice_edge5 = cbind(mydata[,1], mydata$V42)
+
+mydata$V38 = NULL
+mydata$V39 = NULL
+mydata$V40 = NULL
+mydata$V41 = NULL
+mydata$V42 = NULL
+
+mydata$`To begin, please select your name.` = NULL
+
+# Mapping Trust/Distrust strings to a numeric scale-----------
+
+trust_levels = c("I don't know this person.", "This is my own name.",
+                 "Extremely Distrust  1","Distrust  2","Slightly Distrust  3",
+                 "Neither Distrust Nor Trust  4", "Slightly Trust  5","Trust  6", 
+                 "Extremely Trust  7") 
+
+trust_key    =  c(0, 0, 1, 2, 3, 4, 5, 6, 7)
+  
+scale1 = cbind(trust_levels,trust_key)
+
+column_wise_replace(mydata, scale1[,1], scale1[,2])
+
+trust = mydata
+trust[trust<4] = 0
+  
+distrust = mydata
+distrust[distrust>3] = 0
+
+```
+
+####Question 1 Plotting the Trust Network
+
+```{r}
+trusting = graph.adjacency(as.matrix(trust), "directed", weighted = TRUE)
+
+V(trusting)$color = "darkgreen"
+
+plot.igraph(trusting,vertex.label=NA,layout=layout.fruchterman.reingold, vertex.label.color="black",
+            edge.color="black",edge.width=E(trusting)$weight,vertex.size = 12, 
+            edge.arrow.size= .5,edge.curved=FALSE)
+
+```
+
+#### Question 2 Plotting the Distrust Network with random colours
+```{r}
+distrusting = graph.adjacency(as.matrix(distrust), "directed", weighted = TRUE)
+
+V(distrusting)$color =  rainbow(ncol(distrust))
+
+plot.igraph(distrusting,vertex.label=NA,layout=layout.fruchterman.reingold, vertex.label.color="black",edge.color="black",edge.width=E(distrusting)$weight,vertex.size = 12, edge.arrow.size=.3,edge.curved=TRUE)
+
+```
+
+#### Question 3 Plotting the Advice Graph with the most advice giving person highlighted
+```{r}
+
+advice_edges = rbind(advice_edge1, advice_edge2, advice_edge3, advice_edge4, advice_edge5)
+
+advice_seeking = graph.data.frame(advice_edges, directed = TRUE)
+
+## Use the first element in the code beolow if the source data changes !!!!!!
+## In this case the element is 8
+
+most_advice = sort(table(c(advice_edges$`To begin, please select your name.`,
+                           advice_edges$V2)), decreasing = TRUE)
+
+V(advice_seeking)$color = "lightgray"
+V(advice_seeking)$color[8] = "darkblue" #ispect most advice to get "8"
+
+# make the plot
+plot.igraph(advice_seeking,vertex.label=NA,layout=layout.fruchterman.reingold, vertex.label.color="black",edge.color="black",vertex.size = 12, edge.arrow.size=.3,edge.curved=TRUE)
+
+```
+
+#### Question 4
+```{r}
+trust_matrix = as.matrix(as_adjacency_matrix(trusting))
+
+distrust_matrix = as.matrix(as_adjacency_matrix(distrusting))
+
+advice_matrix = as.matrix(as_adjacency_matrix(advice_seeking))
+
+trust_relations = sum(trust_matrix * trust_matrix)
+distrust_relations = sum(distrust_matrix * distrust_matrix)
+advice_relations = sum(advice_matrix * advice_matrix)
+
+cat("Number of reciprocal trust relations: ", trust_relations,
+    "\nNumber of reciprocal distrust relations: ",distrust_relations,
+    "\nNumber of reciprocal advice relations: ",advice_relations)
+```
+Instead of going into calculating the exact median outcome for reciprocal relations we can use a back of the envelope calculation:
+
+If everyone trusts (or distrusts) eachother there are 900 reciprocal trust (or distrust) relations and if we take the half of those we can approximate that there will be on average 450 reciprocal relations in a 30 person group.
+
+We see that for the trust relations we are really colse to the "average".
+
+However for the distrust relations we see that the number of reciprocal relations is quite low. This is probably due to the existence of "Neither trust nor diststrust" option. People probably chose the zero valued relation in stead of distrust relations if the target did not somehow wronged them.
+
+#### Question 5
+
+```{r}
+
+# I got the row/column names by looking at the data...
+
+advice_matrix = advice_matrix[!rownames(advice_matrix) %in% c(4,6,13,34,35), ]
+advice_matrix = advice_matrix[,!colnames(advice_matrix) %in% c(4,6,13,34,35) ]
+
+test_relations = sum(trust_matrix * advice_matrix)
+
+cat("Relations that exist in both the advice and the trust networks: ", test_relations)
+
+```
+
+
+#### Bonus Excercise
+
+Part of the bonus excercise can be found below where I united the advice, trust and distrust graphs. However, I could not distinguish betwheen the edges.
+```{r}
+bonus = union(trusting,distrusting,advice_seeking)
+
+V(bonus)$color = "yellow"
+
+plot.igraph(bonus,vertex.label=NA,layout=layout.fruchterman.reingold, vertex.label.color="black",edge.color="black",vertex.size = 12, edge.arrow.size=.3,edge.curved=FALSE)
+
+```
+
+################## Levent Kayın
